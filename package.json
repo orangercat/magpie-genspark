@@ -1,0 +1,10 @@
+{
+  "name": "opencode-genspark-app-auth",
+  "version": "0.1.0",
+  "description": "Reuse the local Genspark Super App session in Magpie",
+  "type": "module",
+  "main": "./index.mjs",
+  "files": ["index.mjs", "README.md"],
+  "keywords": ["opencode-plugin", "genspark", "magpie"],
+  "scripts": { "test": "node --test test.mjs" }
+}
