@@ -13,7 +13,7 @@
 | `genspark-llm-proxy` | Genspark GenCode | Chat Completions | `GensparkApp` |
 | `genspark-gemini-proxy` | Genspark GenCode Gemini | Gemini | `GensparkGeminiApp` |
 
-两个供应商共用 Genspark Super App 内 GenCode 的绿色终端图标，图形与颜色取自 App 内置的 `SpaceGlyph` 组件（2026-10-25）。图标内嵌在包元数据中，显示时无需额外访问图片服务器。
+两个供应商共用 Genspark 品牌图标（黑底白色星芒与底部横线），取自 Genspark Super App 内置 `SpaceGlyph` 组件的 `genspark` 图标（2026-10-25）。图标内嵌在包元数据中，显示时无需额外访问图片服务器。
 
 ## 使用
 
