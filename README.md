@@ -1,5 +1,7 @@
 # Magpie · Genspark App 登录复用
 
+简体中文 | [English](./README.en.md)
+
 <img src="./icon.svg" width="32" height="32" alt="Genspark App 登录复用插件图标">
 
 适用于 macOS 的 Genspark Super App。只读 App 为 GenCode 生成的凭据，每次请求重新读取文件，跟随 App 的凭据更新；不解密 `session.enc`，不复制保存真实密钥。
