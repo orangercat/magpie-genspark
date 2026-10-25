@@ -6,6 +6,12 @@
 
 适用于 macOS 的 Genspark Super App。只读 App 为 GenCode 生成的凭据，每次请求重新读取文件，跟随 App 的凭据更新；不解密 `session.enc`，不复制保存真实密钥。
 
+## 0.2.0 更新（2026-10-25）
+
+新增生图模型查询、图片生成与补下载工具，以及生图前后积分显示。兼容现有两个聊天供应商，无需迁移已有登录配置。13 项回归检查通过，并已通过 Magpie MCP 验证实际生图、图片下载及 quota 余额一致。工具调用有 55 秒限制；慢任务超时后先核对记录和余额，避免重复生成。
+
+上一可用版本为 0.1.1，提交 `eaa6328f31635c1ceead367d39bfe4bfb68e4686`。需要回退时可安装 `github:orangercat/magpie-genspark#eaa6328f31635c1ceead367d39bfe4bfb68e4686`；回退保留已有图片和登录配置，三个新增生图工具将不可用。
+
 ## 供应商
 
 一个插件导出两个供应商，需要分别连接，但共用本机 Genspark App 的账号和积分：
@@ -44,6 +50,30 @@ magpie plugin update
 
 `magpie quota` 会分别显示两个 Genspark 供应商绑定账号的套餐和实时积分余额。两个供应商共用同一个 Genspark App 账号。
 
+## 生图与下载
+
+插件还通过 Magpie 的[插件工具 MCP](https://usemagpie.ai/docs/zh/plugins#tools) 提供三个工具。它们复用本机 App **当前账号**，无需填写密钥；聊天供应商仍按各自的登录绑定工作。
+
+| 工具名（本地文件夹安装） | 用途 |
+| --- | --- |
+| `magpie-genspark_image_models` | 实时查询服务端生图模型、参数及积分余额，不生成图片 |
+| `magpie-genspark_image_generate` | 文生图，先保存结果，再下载图片，返回路径、前后余额及差额 |
+| `magpie-genspark_image_download` | 使用生成结果的 `receipt` 路径补下载，不重新生图 |
+
+完整工具名前缀由 Magpie 按安装来源生成，GitHub 安装时可能不同，以插件页或 MCP `tools/list` 为准。将插件页提供的服务器地址接入支持 MCP 的智能体；本机默认地址为 `http://127.0.0.1:3425/mcp/magpie/tools`。例如：
+
+```sh
+claude mcp add --transport http magpie-tools http://127.0.0.1:3425/mcp/magpie/tools
+```
+
+对智能体说：“用 Genspark 生图工具画一只橘猫，下载图片并告诉我积分变化。”默认模型为 `nano-banana-2-flash-lite`，1:1、1k。可传入 `model`、`aspect_ratio`、`image_size`（先查 `image_models`）及绝对路径 `output_dir`。本轮接入文生图，未接入参考图编辑。
+
+默认保存到 `~/Pictures/Genspark/<随机 ID>/`。图片及 `receipt.json` 只保存在本机；记录权限 600、任务目录权限 700。记录含提示词、账号与私有图片地址，不含 App API Key；**不要提交公开仓库**。`receipt` 可供 `image_download` 重试，必须使用生成时的 App 账号。下载先用官方 `/file/download` 获取带令牌的地址，保留完整参数并使用浏览器 User-Agent，避免本次实测的 403/1010；下载请求不附加 App API Key。
+
+结果的 `credits` 包含 `before`、`after`、`difference`、`unit`。差额是账户余额变化，若同时运行其他任务，不是此图的逐笔账单；`estimated_credits` 为服务端预估值。现有 `magpie quota genspark-llm-proxy` 仍显示账号实时积分。Magpie 每次工具调用最多 55 秒；慢模型或网络可能超时。已有生成结果时只补下载；没有结果时先在 App 核对任务与余额，避免自动重试导致重复扣费。
+
+2026-10-25 已通过 Magpie MCP 实际调用：模型目录返回 15 个模型，默认模型返回并下载 1024×1024 JPEG，余额减少 18.7 积分。模型列表与费用取决于账号和实时服务状态。
+
 ## 开发与验证
 
 项目使用 Node.js ES 模块和内置 API，没有额外 npm 依赖；测试需要可用的 Node.js 和 npm。文件入口如下：
@@ -51,7 +81,9 @@ magpie plugin update
 | 文件 | 用途 |
 | --- | --- |
 | `index.mjs` | 两个插件导出、凭据读取、账号绑定、模型目录映射和请求转发 |
+| `images.mjs` | 生图工具、私有结果记录、补下载与积分差额 |
 | `test.mjs` | 使用临时凭据和模拟 fetch 的回归测试 |
+| `images.test.mjs` | 生图、记录保存顺序、补下载、积分和文件入口校验 |
 | `package.json` | 包入口、发布文件范围和测试命令 |
 | `icon.svg` | 共享图标的 SVG 源文件；`package.json` 的 `magpie.icon` 内嵌相同内容 |
 
@@ -61,7 +93,7 @@ magpie plugin update
 npm test
 ```
 
-2026-10-24 本轮运行 `npm test`，8 项检查全部通过。覆盖免密登录、模型与档位过滤、两个供应商的余额查询和请求转发、凭据轮换、换号拦截、无效凭据及目录服务故障。测试不读取本机真实凭据，也不发送网络请求，不消耗 Genspark 积分。
+2026-10-25 运行 `npm test`，13 项检查全部通过。覆盖原有免密登录、模型映射、余额查询与请求转发，以及生图结果先落盘、403 后补下载、积分差额、输入校验、账号切换和不安全下载地址拦截。测试不读取本机真实凭据，也不发送网络请求，不消耗 Genspark 积分。
 
 需要真实联调时，可在连接成功后运行：
 
@@ -112,6 +144,6 @@ magpie plugin login genspark-gemini-proxy
 - App 换号时插件会拒绝继续使用旧账号绑定，需要重新连接两个供应商。目录在内存最多缓存 60 秒；密钥变化立即重新校验账号。
 - 凭据过期由 App 负责更新；插件不自行申请或刷新凭据。模型目录返回 401 时，插件会报告登录失效；推理请求的响应直接交给 Magpie 处理。
 - 目录返回的价格单位是 Genspark 积分，不是美元。因此不把它写成美元单价，Magpie 中的美元费用估算为零，**不代表免费**。实际计费以 Genspark 为准。
-- 请求只允许发往 `https://www.genspark.ai` 对应的模型代理路径，禁止跟随重定向，不记录密钥和对话内容。
+- 聊天请求仅发往 `https://www.genspark.ai` 对应模型代理路径；生图使用该站的工具 API 和文件入口，均禁止跟随重定向。真实密钥不落盘；生图记录会保存提示词与私有文件地址。
 - 当前只适配 macOS；Windows、Linux 尚未适配和验证。
 - 插件不会修改任何 Agent 的模型选择，也不新增依赖。本项目为非官方插件。

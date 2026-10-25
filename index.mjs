@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createImageTools } from "./images.mjs";
 
 const ORIGIN = "https://www.genspark.ai";
 const PROFILE = join(homedir(), "Library/Application Support/gensparkaio/spaces/gencode/gsk/profile/config.json");
@@ -28,7 +29,7 @@ async function readProfile(path) {
   if (profile.base_url !== ORIGIN || typeof profile.api_key !== "string" || !profile.api_key.trim()) {
     throw expired("GenCode 凭据无效或服务地址不受支持。请在 Genspark App 中重新登录。");
   }
-  return profile.api_key;
+  return { token: profile.api_key, projectID: profile.project_id };
 }
 
 function modelList(def, catalog) {
@@ -58,7 +59,7 @@ function modelList(def, catalog) {
 function createProvider(def, profilePath = PROFILE) {
   let cached;
   async function session(auth, refresh = false) {
-    const token = await readProfile(profilePath);
+    const { token, projectID } = await readProfile(profilePath);
     if (refresh || !cached || cached.token !== token || Date.now() - cached.at > 60_000) {
       const response = await fetch(ORIGIN + "/api/tool_cli/opencode-config", {
         headers: { "x-api-key": token, accept: "application/json" },
@@ -74,10 +75,11 @@ function createProvider(def, profilePath = PROFILE) {
     if (auth && (auth.key !== "genspark-app-session" || auth.metadata?.email !== cached.email)) {
       throw expired("Genspark App 当前账号与插件绑定账号不同。请重新连接此插件。");
     }
-    return cached;
+    return { ...cached, projectID };
   }
 
   return {
+    ...(def.id === DEFINITIONS[0].id ? { tool: createImageTools(() => session(undefined, true)) } : {}),
     config: async cfg => {
       cfg.provider ??= {};
       cfg.provider[def.id] ??= { name: def.name, npm: def.npm, api: ORIGIN + def.path, models: {} };
