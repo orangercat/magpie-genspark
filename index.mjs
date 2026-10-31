@@ -19,17 +19,91 @@ function creditBalance(value) {
   return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)} credits`;
 }
 
-async function readProfile(path) {
+function getCandidateProfilePaths() {
+  const list = [];
+  if (process.platform === "win32") {
+    const appdata = process.env.APPDATA || join(homedir(), "AppData/Roaming");
+    list.push(
+      join(appdata, "gensparkaio/spaces/gencode/gsk/profile/config.json"),
+      join(appdata, "gensparkaio/spaces/gencode/opencode-server-config.json"),
+    );
+  } else if (process.platform === "darwin") {
+    const lib = join(homedir(), "Library/Application Support");
+    list.push(
+      join(lib, "gensparkaio/spaces/gencode/gsk/profile/config.json"),
+      join(lib, "gensparkaio/spaces/gencode/opencode-server-config.json"),
+    );
+  } else {
+    const config = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+    list.push(
+      join(config, "gensparkaio/spaces/gencode/gsk/profile/config.json"),
+      join(config, "gensparkaio/spaces/gencode/opencode-server-config.json"),
+    );
+  }
+  list.push(join(homedir(), ".genspark-tool-cli/config.json"));
+  return list;
+}
+
+function parseProfileCredentials(raw) {
   let profile;
   try {
-    profile = JSON.parse(await readFile(path, "utf8"));
+    profile = JSON.parse(raw);
   } catch {
-    throw expired("无法读取 GenCode 登录凭据。请在 Genspark App 中登录并打开 GenCode，再重新连接此插件。");
+    return null;
   }
-  if (profile.base_url !== ORIGIN || typeof profile.api_key !== "string" || !profile.api_key.trim()) {
-    throw expired("GenCode 凭据无效或服务地址不受支持。请在 Genspark App 中重新登录。");
+  if (!profile || typeof profile !== "object") return null;
+
+  // Format 1: gsk session profile or ~/.genspark-tool-cli/config.json
+  if ("api_key" in profile) {
+    if (profile.base_url !== ORIGIN || typeof profile.api_key !== "string" || !profile.api_key.trim()) {
+      throw expired("GenCode 凭据无效或服务地址不受支持。请在 Genspark App 中重新登录。");
+    }
+    return { token: profile.api_key, projectID: profile.project_id };
   }
-  return { token: profile.api_key, projectID: profile.project_id };
+
+  // Format 2: opencode-server-config.json (Electron persistent cache in spaceUserData)
+  const proxy = profile.config?.provider?.["genspark-llm-proxy"]?.options;
+  if (proxy && "apiKey" in proxy) {
+    const baseURL = proxy.baseURL ?? "";
+    if (!baseURL.startsWith(ORIGIN) || typeof proxy.apiKey !== "string" || !proxy.apiKey.trim()) {
+      throw expired("GenCode 凭据无效或服务地址不受支持。请在 Genspark App 中重新登录。");
+    }
+    return { token: proxy.apiKey, projectID: profile.cogenId };
+  }
+
+  return null;
+}
+
+async function readProfile(path) {
+  if (path && path !== PROFILE) {
+    let content;
+    try {
+      content = await readFile(path, "utf8");
+    } catch {
+      throw expired("无法读取 GenCode 登录凭据。请在 Genspark App 中登录并打开 GenCode，再重新连接此插件。");
+    }
+    const creds = parseProfileCredentials(content);
+    if (!creds) {
+      throw expired("GenCode 凭据无效或服务地址不受支持。请在 Genspark App 中重新登录。");
+    }
+    return creds;
+  }
+
+  const candidates = [path, ...getCandidateProfilePaths()].filter(Boolean);
+  let lastExpiredError = null;
+  for (const candidate of candidates) {
+    try {
+      const content = await readFile(candidate, "utf8");
+      const creds = parseProfileCredentials(content);
+      if (creds) return creds;
+    } catch (err) {
+      if (err?.signIn === "expired") {
+        lastExpiredError = err;
+      }
+    }
+  }
+  if (lastExpiredError) throw lastExpiredError;
+  throw expired("无法读取 GenCode 登录凭据。请在 Genspark App 中登录并打开 GenCode，再重新连接此插件。");
 }
 
 function modelList(def, catalog) {

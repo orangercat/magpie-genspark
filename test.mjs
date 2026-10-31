@@ -49,6 +49,29 @@ test("keyless sign-in stores only a marker and binds the account", async () => {
   } finally { fetch.mock.restore(); }
 });
 
+test("keyless sign-in supports persistent opencode-server-config format", async () => {
+  const path = join(root, "opencode-server-config.json");
+  await writeFile(path, JSON.stringify({
+    cogenId: "proj-123",
+    config: {
+      provider: {
+        "genspark-llm-proxy": {
+          options: { apiKey: "fake-opencode-token", baseURL: origin + "/api/llm_proxy/v1" }
+        }
+      }
+    }
+  }));
+  const hooks = _internal.createProvider(_internal.definitions[0], path);
+  const fetch = mock.method(globalThis, "fetch", async (url, init) => {
+    assert.equal(init.headers["x-api-key"], "fake-opencode-token");
+    return Response.json(catalog("one@example.test"));
+  });
+  try {
+    const result = await hooks.auth.methods[0].authorize();
+    assert.deepEqual(result, { type: "success", key: "genspark-app-session", metadata: { email: "one@example.test" } });
+  } finally { fetch.mock.restore(); }
+});
+
 for (const def of _internal.definitions) {
   test(`${def.id}: quota reports the live Genspark credit balance`, async () => {
     const { hooks } = await fixture(`${def.id}-usage`, def);
