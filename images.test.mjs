@@ -47,7 +47,7 @@ test("generates once, saves response before resolving, downloads without credent
     assert.equal(result.status, "downloaded");
     assert.deepEqual(result.credits, { before: 100, after: 81.3, difference: 18.7, unit: "credits" });
     assert.deepEqual(await readFile(result.images[0].path), jpeg);
-    assert.equal((await stat(receipt)).mode & 0o777, 0o600);
+    assert.equal((await stat(receipt)).mode & 0o777, process.platform === "win32" ? 0o666 : 0o600);
     assert.equal(JSON.stringify(result).includes("signed"), false);
     assert.equal((await readFile(receipt, "utf8")).includes("fake-key"), false);
     assert.equal(calls, 4);
